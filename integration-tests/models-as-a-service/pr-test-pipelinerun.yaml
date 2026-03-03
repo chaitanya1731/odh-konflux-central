@@ -197,22 +197,12 @@ spec:
 
             - name: clone-repo
               image: alpine/git
-              env:
-                - name: source_branch
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: metadata.annotations['pipelinesascode.tekton.dev/source-branch']
               script: |
-                echo "Branch: ${source_branch}"
-                echo "Repo: $(params.git-url)"
-                echo "Revision (SHA): $(params.git-rev)"
-                # Clone by branch name (PAC); --branch with a SHA fails on the remote
-                git clone --depth 1 --branch ${source_branch} $(params.git-url) /workspace/source
+                echo $(params.git-url)
+                echo $(params.git-rev)
+                git clone --depth 1 --branch $(params.git-rev) $(params.git-url) /workspace/source
                 git config --global --add safe.directory /workspace/source
                 cd /workspace/source
-                # Check out the exact PR commit (SHA from parse-metadata)
-                git fetch --depth 1 origin $(params.git-rev)
-                git checkout $(params.git-rev)
 
             - name: e2e-maas-api-openshift
               image: quay.io/rhoai/rhoai-task-toolset:maas
