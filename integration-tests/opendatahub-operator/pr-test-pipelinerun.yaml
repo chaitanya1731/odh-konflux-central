@@ -68,9 +68,12 @@ spec:
         params:
           - name: BUILD_TYPE
             value: $(params.BUILD_TYPE)
+          - name: TARGET_BRANCH
+            value: $(tasks.parse-metadata.results.target-git-branch)
         taskSpec:
           params:
           - name: BUILD_TYPE
+          - name: TARGET_BRANCH
           results:
           - name: event-type
             description: "stores info about event type"
@@ -90,6 +93,8 @@ spec:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['pac.test.appstudio.openshift.io/pull-request']
+              - name: TARGET_BRANCH
+                value: $(params.TARGET_BRANCH)
               - name: BUILD_TYPE
                 value: $(params.BUILD_TYPE)
             script: |
@@ -97,15 +102,23 @@ spec:
               set -e
               echo "EVENT_TYPE=${EVENT_TYPE}"
               echo "PR_NUMBER=${PR_NUMBER}"
+              echo "TARGET_BRANCH=${TARGET_BRANCH}"
               echo "BUILD_TYPE=${BUILD_TYPE}"
               echo -n "${EVENT_TYPE}" > $(results.event-type.path)
               echo -n "${PR_NUMBER}" > $(results.pr-number.path)
 
-              if [ -n "${PR_NUMBER}" ] || [ "${BUILD_TYPE}" = "RELEASE" ]; then
-                echo "Prerequisites met: PR_NUMBER is set or BUILD_TYPE is RELEASE"
+              # Check if target branch matches ODH release pattern (odh-x.y.z or odh-x.y.z-anything)
+              ODH_RELEASE_BRANCH=""
+              if [[ "${TARGET_BRANCH}" =~ ^odh-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+                ODH_RELEASE_BRANCH="true"
+                echo "Target branch matches ODH release pattern: ${TARGET_BRANCH}"
+              fi
+
+              if [ -n "${PR_NUMBER}" ] || [ "${BUILD_TYPE}" = "Release" ] || [ "${ODH_RELEASE_BRANCH}" = "true" ]; then
+                echo "Prerequisites met: PR_NUMBER is set, BUILD_TYPE is Release, or TARGET_BRANCH matches ODH release pattern"
                 echo -n "true" > $(results.prerequisites-met.path)
               else
-                echo "Prerequisites not met: PR_NUMBER is empty and BUILD_TYPE is not RELEASE"
+                echo "Prerequisites not met: PR_NUMBER is empty, BUILD_TYPE is not Release, and TARGET_BRANCH doesn't match ODH release pattern"
                 echo -n "false" > $(results.prerequisites-met.path)
               fi
 

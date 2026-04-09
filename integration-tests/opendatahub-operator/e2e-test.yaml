@@ -101,11 +101,11 @@ spec:
               echo -n "${EVENT_TYPE}" > $(results.event-type.path)
               echo -n "${PR_NUMBER}" > $(results.pr-number.path)
 
-              if [ -n "${PR_NUMBER}" ] || [ "${BUILD_TYPE}" = "RELEASE" ]; then
-                echo "Prerequisites met: PR_NUMBER is set or BUILD_TYPE is RELEASE"
+              if [ -n "${PR_NUMBER}" ] || [ "${BUILD_TYPE}" = "Release" ]; then
+                echo "Prerequisites met: PR_NUMBER is set or BUILD_TYPE is Release"
                 echo -n "true" > $(results.prerequisites-met.path)
               else
-                echo "Prerequisites not met: PR_NUMBER is empty and BUILD_TYPE is not RELEASE"
+                echo "Prerequisites not met: PR_NUMBER is empty and BUILD_TYPE is not Release"
                 echo -n "false" > $(results.prerequisites-met.path)
               fi
 

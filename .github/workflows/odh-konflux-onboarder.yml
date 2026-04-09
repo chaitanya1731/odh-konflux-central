@@ -217,6 +217,7 @@ jobs:
 
                 sed -i -E 's|\$\$OUTPUT_IMAGE_TAG\$\$|'"${EFFECTIVE_TAG}"'|g' "$target_file"
                 sed -i -E 's|\$\$TARGET_BRANCH\$\$|'"${TARGET_BRANCH}"'|g' "$target_file"
+                sed -i -E 's|\$\$BUILD_TYPE\$\$|'"${{ inputs.build_type }}"'|g' "$target_file"
 
               ########################################
               # Other pipelines
@@ -256,8 +257,43 @@ jobs:
               sed -i -E 's|(name: .*)-on-push|\1-on-release-push|' "$target_file"
               sed -i -E 's|\$\$OUTPUT_IMAGE_TAG\$\$|'"${VERSION}"'|g' "$target_file"
               sed -i -E 's|\$\$TARGET_BRANCH\$\$|'"${TARGET_BRANCH}"'|g' "$target_file"
+              sed -i -E 's|\$\$BUILD_TYPE\$\$|'"${{ inputs.build_type }}"'|g' "$target_file"
 
             done
+          fi
+
+          ##################################################
+          # ODH OPERATOR RELEASE BUNDLE/FBC PIPELINES
+          ##################################################
+
+          # Process bundle and FBC pipelines for opendatahub-operator only
+          if [ "${{ inputs.component }}" = "opendatahub-operator" ] && [ "$BUILD_TYPE" = "Release" ]; then
+            echo "Processing opendatahub-operator release bundle/FBC pipelines"
+
+            # Extract VERSION from OUTPUT_IMAGE_TAG (remove 'v' prefix if present)
+            VERSION_VALUE=$(echo "${VERSION}" | sed 's/^v//')
+
+            release_folder="$repo_folder/release"
+
+            if [ -d "$release_folder" ]; then
+              find "$release_folder" -type f -name "*-release-push.yaml" | while read src_file; do
+
+                base_name=$(basename "$src_file")
+                target_file=".tekton/$base_name"
+
+                echo "Processing release template: $target_file"
+                cp "$src_file" "$target_file"
+
+                # Apply standard substitutions
+                sed -i -E 's|\$\$OUTPUT_IMAGE_TAG\$\$|'"${VERSION}"'|g' "$target_file"
+                sed -i -E 's|\$\$TARGET_BRANCH\$\$|'"${TARGET_BRANCH}"'|g' "$target_file"
+                sed -i -E 's|\$\$BUILD_TYPE\$\$|'"${{ inputs.build_type }}"'|g' "$target_file"
+                sed -i -E 's|\$\$VERSION\$\$|'"${VERSION_VALUE}"'|g' "$target_file"
+
+              done
+            else
+              echo "No release/ folder found for opendatahub-operator"
+            fi
           fi
 
           ##################################################
