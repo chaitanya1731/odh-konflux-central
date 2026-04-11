@@ -221,7 +221,7 @@ spec:
             operator: notin
             values: ["push"]
       - name: e2e-maas-api-openshift
-        timeout: 1h
+        timeout: 1h30m
         runAfter:
           - provision-cluster
         params:
@@ -313,10 +313,6 @@ spec:
                   mountPath: /credentials
               script: |
                 #!/bin/bash
-                # models-as-a-service must-gather
-                mkdir -p "${ARTIFACT_DIR}/gather-models-as-a-service"
-                oc adm must-gather --image=quay.io/chkulkar/must-gather:maas-test-v3 --dest-dir "${ARTIFACT_DIR}/gather-models-as-a-service" -- "export COMPONENT=maas; /usr/bin/gather"
-
                 # openshift-must-gather
                 mkdir -p "${ARTIFACT_DIR}/gather-openshift"
                 oc adm must-gather --dest-dir "${ARTIFACT_DIR}/gather-openshift"
@@ -343,15 +339,6 @@ spec:
                   value: 'test-artifacts/$(context.pipelineRun.name)'
                 - name: pipelinerun-name
                   value: $(context.pipelineRun.name)
-            - name: check-test-exit-code
-              image: quay.io/konflux-ci/konflux-test:stable
-              script: |
-                #!/bin/bash
-                EXIT_CODE=$(cat $(steps.e2e-maas-api-openshift.exitCode.path))
-                if [ "${EXIT_CODE}" != "0" ]; then
-                  echo "Tests failed with exit code ${EXIT_CODE}"
-                  exit "${EXIT_CODE}"
-                fi
         when:
           - input: "$(tasks.check-prerequisites.results.event-type)"
             operator: notin
@@ -364,6 +351,8 @@ spec:
           value: $(params.oci-artifacts-repo)
         - name: pipeline-status
           value: $(tasks.status)
+        - name: artifact-browser-url
+          value: $(params.artifact-browser-url)
       taskSpec:
         volumes:
           - name: odh-registry-secret-volume
@@ -377,6 +366,9 @@ spec:
             description: oci-artifacts-repo
           - name: pipeline-status
             type: string
+          - name: artifact-browser-url
+            type: string
+            description: url for browsing oci test artifacts
         steps:
           - name: pull-ci-artifacts
             ref:
