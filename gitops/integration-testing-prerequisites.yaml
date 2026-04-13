@@ -113,52 +113,6 @@ kind: IntegrationTestScenario
 metadata:
   labels:
     test.appstudio.openshift.io/optional: "false"
-  name: models-as-a-service-ci-its-manual
-  namespace: open-data-hub-tenant
-spec:
-  application: opendatahub-builds
-  contexts:
-    - description: execute the integration test when component maas-api updates
-      name: component_odh-maas-api-ci
-  resolverRef:
-    params:
-      - name: url
-        value: https://github.com/opendatahub-io/odh-konflux-central.git
-      - name: revision
-        value: main
-      - name: pathInRepo
-        value: integration-tests/models-as-a-service/pr-test-pipelinerun.yaml
-    resolver: git
-    resourceKind: pipelinerun
----
-apiVersion: appstudio.redhat.com/v1beta2
-kind: IntegrationTestScenario
-metadata:
-  labels:
-    test.appstudio.openshift.io/optional: "false"
-  name: models-as-a-service-controller-ci-its-manual
-  namespace: open-data-hub-tenant
-spec:
-  application: opendatahub-builds
-  contexts:
-    - description: execute the integration test when component maas-controller updates
-      name: component_odh-maas-controller-ci
-  resolverRef:
-    params:
-      - name: url
-        value: https://github.com/opendatahub-io/odh-konflux-central.git
-      - name: revision
-        value: main
-      - name: pathInRepo
-        value: integration-tests/models-as-a-service/pr-test-pipelinerun.yaml
-    resolver: git
-    resourceKind: pipelinerun
----
-apiVersion: appstudio.redhat.com/v1beta2
-kind: IntegrationTestScenario
-metadata:
-  labels:
-    test.appstudio.openshift.io/optional: "false"
   name: odh-operator-ci-e2e-its-manual
   namespace: open-data-hub-tenant
 spec:
