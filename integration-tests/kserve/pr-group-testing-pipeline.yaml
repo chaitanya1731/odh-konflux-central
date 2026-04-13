@@ -1758,4 +1758,3 @@ spec:
   - name: netrc
     optional: true
   - name: pipeline-logs
-    optional: true
