@@ -1689,7 +1689,7 @@ spec:
             - name: artifacts-dir-path
               value: 'test-artifacts/$(context.pipelineRun.name)'
         - name: collect-tekton-logs
-          image: quay.io/redhat-appstudio/appstudio-utils:latest
+          image: quay.io/konflux-ci/tekton-integration-catalog/utils:latest
           env:
             - name: PR_NAME
               value: $(context.pipelineRun.name)
@@ -1697,8 +1697,7 @@ spec:
               value: $(context.pipelineRun.namespace)
           script: |
             #!/bin/bash
-            # Best-effort log collection — must not block the OCI push or PR comment
-            set +e
+            set -euo pipefail
 
             LOGS_DIR="/workspace/odh-ci-artifacts/test-artifacts/${PR_NAME}/tekton-logs"
             mkdir -p "${LOGS_DIR}"
