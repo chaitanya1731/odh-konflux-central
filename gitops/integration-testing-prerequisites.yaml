@@ -199,3 +199,36 @@ spec:
         value: integration-tests/trainer/pr-testing-pipeline.yaml
     resolver: git
     resourceKind: pipelinerun
+---
+apiVersion: appstudio.redhat.com/v1beta2
+kind: IntegrationTestScenario
+metadata:
+  labels:
+    test.appstudio.openshift.io/optional: "false"
+  name: distributed-workloads-its-manual
+  namespace: open-data-hub-tenant
+spec:
+  application: opendatahub-builds
+  contexts:
+    - description: execute the integration test when component odh-training-rocm64-torch28-py312-ci updates
+      name: component_odh-training-rocm64-torch28-py312-ci
+    - description: execute the integration test when component odh-training-rocm62-torch25-py311-ci updates
+      name: component_odh-training-rocm62-torch25-py311-ci
+    - description: execute the integration test when component odh-training-rocm62-torch24-py311-ci updates
+      name: component_odh-training-rocm62-torch24-py311-ci
+    - description: execute the integration test when component odh-training-cuda128-torch28-py312-ci updates
+      name: component_odh-training-cuda128-torch28-py312-ci
+    - description: execute the integration test when component odh-training-cuda124-torch25-py311-ci updates
+      name: component_odh-training-cuda124-torch25-py311-ci
+    - description: execute the integration test when component odh-training-cuda121-torch24-py311-ci updates
+      name: component_odh-training-cuda121-torch24-py311-ci
+  resolverRef:
+    params:
+      - name: url
+        value: https://github.com/opendatahub-io/odh-konflux-central.git
+      - name: revision
+        value: main
+      - name: pathInRepo
+        value: integration-tests/distributed-workloads/pr-testing-pipeline.yaml
+    resolver: git
+    resourceKind: pipelinerun
