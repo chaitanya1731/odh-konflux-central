@@ -26,6 +26,7 @@ on:
           - kserve
           - kserve-autogluon-server
           - kube-auth-proxy
+          - kube-rbac-proxy
           - kubeflow
           - kuberay
           - llama-stack-k8s-operator
