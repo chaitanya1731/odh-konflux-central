@@ -201,6 +201,8 @@ spec:
                   value: $(params.SNAPSHOT)
                 - name: ARTIFACT_DIR
                   value: /workspace/artifacts-dir
+                - name: APPLICATIONS_NAMESPACE
+                  value: kubeflow-trainer-system
               workingDir: /workspace/source
               volumeMounts:
                 - name: credentials
