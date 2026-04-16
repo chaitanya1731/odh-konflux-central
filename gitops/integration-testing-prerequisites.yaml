@@ -164,6 +164,8 @@ metadata:
 spec:
   application: opendatahub-builds
   contexts:
+    - description: execute the integration test when component odh-th06-cpu-torch291-py312-ci updates
+      name: component_odh-th06-cpu-torch291-py312-ci
     - description: execute the integration test when component odh-training-rocm64-torch28-py312-ci updates
       name: component_odh-training-rocm64-torch28-py312-ci
     - description: execute the integration test when component odh-training-rocm62-torch25-py311-ci updates

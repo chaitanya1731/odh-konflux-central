@@ -201,6 +201,8 @@ spec:
                   value: $(params.SNAPSHOT)
                 - name: ARTIFACT_DIR
                   value: /workspace/artifacts-dir
+                - name: APPLICATIONS_NAMESPACE
+                  value: kubeflow-trainer-system
               workingDir: /workspace/source
               volumeMounts:
                 - name: credentials
@@ -371,8 +373,15 @@ spec:
 
                 echo "Running Smoke and Sanity tests..."
                 mkdir -p "${ARTIFACT_DIR}"
-                TEST_TIER=Smoke go test -v -timeout 30m ./tests/trainer/ 2>&1 | tee "${ARTIFACT_DIR}/smoke-tests.log"
-                TEST_TIER=Sanity go test -v -timeout 30m ./tests/trainer/ 2>&1 | tee "${ARTIFACT_DIR}/sanity-tests.log"
+                TESTS_PASSED=true
+                TEST_TIER=Smoke go test -v -timeout 60m ./tests/trainer/ > "${ARTIFACT_DIR}/smoke-tests.log" 2>&1 || TESTS_PASSED=false
+                TEST_TIER=Sanity go test -v -timeout 60m ./tests/trainer/ > "${ARTIFACT_DIR}/sanity-tests.log" 2>&1 || TESTS_PASSED=false
+                cat "${ARTIFACT_DIR}/smoke-tests.log"
+                cat "${ARTIFACT_DIR}/sanity-tests.log"
+                if [ "${TESTS_PASSED}" != "true" ]; then
+                  echo "Tests failed"
+                  exit 1
+                fi
 
                 echo "success" > "$STATUS_FILE"
             - name: must-gather
