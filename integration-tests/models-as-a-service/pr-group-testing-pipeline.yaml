@@ -352,6 +352,7 @@ spec:
           type: string
       steps:
         - name: pull-ci-artifacts
+          onError: continue
           ref:
             resolver: git
             params:
@@ -373,6 +374,7 @@ spec:
             - name: artifacts-dir-path
               value: 'test-artifacts/$(context.pipelineRun.name)'
         - name: secure-push-oci
+          onError: continue
           ref:
             resolver: git
             params:
@@ -419,6 +421,7 @@ spec:
             - name: artifact-browser-url
               value: $(params.artifact-browser-url)
         - name: cleanup-artifacts-from-git
+          onError: continue
           ref:
             resolver: git
             params:
