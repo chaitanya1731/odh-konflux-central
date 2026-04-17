@@ -381,6 +381,7 @@ spec:
                 git -C dw_src fetch "${DW_GIT_URL}" "${DW_GIT_COMMIT}" --depth=1
                 git -C dw_src checkout FETCH_HEAD
 
+                cd dw_src
                 echo "Running Smoke and Sanity tests..."
                 mkdir -p "${ARTIFACT_DIR}"
                 TESTS_PASSED=true
