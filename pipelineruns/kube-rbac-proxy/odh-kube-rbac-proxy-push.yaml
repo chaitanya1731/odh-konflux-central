@@ -25,7 +25,7 @@ spec:
   - name: output-image
     value: quay.io/opendatahub/odh-kube-rbac-proxy:odh-stable
   - name: dockerfile
-    value: Dockerfile.odh
+    value: Dockerfile.redhat
   - name: path-context
     value: .
   pipelineRef:
