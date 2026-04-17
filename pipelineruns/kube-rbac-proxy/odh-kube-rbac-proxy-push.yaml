@@ -12,9 +12,9 @@ metadata:
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: opendatahub-builds
-    appstudio.openshift.io/component: kube-rbac-proxy-ci
+    appstudio.openshift.io/component: odh-kube-rbac-proxy-ci
     pipelines.appstudio.openshift.io/type: build
-  name: kube-rbac-proxy-ci-on-push
+  name: odh-kube-rbac-proxy-ci-on-push
   namespace: open-data-hub-tenant
 spec:
   params:
@@ -38,7 +38,7 @@ spec:
     - name: pathInRepo
       value: pipeline/multi-arch-container-build.yaml
   taskRunTemplate:
-      serviceAccountName: build-pipeline-kube-rbac-proxy-ci
+      serviceAccountName: build-pipeline-odh-kube-rbac-proxy-ci
   workspaces:
   - name: git-auth
     secret:
