@@ -867,6 +867,7 @@ spec:
             mkdir -p ${DEST_DIR}
             oc adm must-gather --dest-dir "${DEST_DIR}"
         - name: git-push-artifacts
+          onError: continue
           ref:
             resolver: git
             params:
@@ -1103,6 +1104,7 @@ spec:
             mkdir -p ${DEST_DIR}
             oc adm must-gather --dest-dir "${DEST_DIR}"
         - name: git-push-artifacts
+          onError: continue
           ref:
             resolver: git
             params:
@@ -1338,6 +1340,7 @@ spec:
             mkdir -p ${DEST_DIR}
             oc adm must-gather --dest-dir "${DEST_DIR}"
         - name: git-push-artifacts
+          onError: continue
           ref:
             resolver: git
             params:
@@ -1583,6 +1586,7 @@ spec:
             oc adm must-gather --dest-dir "${DEST_DIR}"
 
         - name: git-push-artifacts
+          onError: continue
           ref:
             resolver: git
             params:
@@ -1680,14 +1684,14 @@ spec:
             LOGS_DIR="/workspace/odh-ci-artifacts/test-artifacts/${PR_NAME}/tekton-logs"
             mkdir -p "${LOGS_DIR}"
 
+            # Collect logs for each TaskRun using tkn, which preserves step
+            # execution order and prefixes each line with [step-name].
             kubectl get pr "${PR_NAME}" -n "${PR_NAMESPACE}" -o json \
               | jq -r '.status.childReferences[].name' \
               | while read -r taskrun; do
-                  POD_NAME=$(kubectl get tr "${taskrun}" -n "${PR_NAMESPACE}" -o json | jq -r '.status.podName // empty')
-                  if [ -n "${POD_NAME}" ]; then
-                    echo "Collecting logs for ${taskrun} (pod: ${POD_NAME})"
-                    kubectl logs -n "${PR_NAMESPACE}" "pod/${POD_NAME}" --all-containers > "${LOGS_DIR}/${taskrun}.log" 2>&1 || true
-                  fi
+                  echo "Collecting logs for ${taskrun}"
+                  tkn taskrun logs "${taskrun}" -n "${PR_NAMESPACE}" --prefix \
+                    > "${LOGS_DIR}/${taskrun}.log" 2>&1 || true
                 done
 
             echo "Collected $(ls "${LOGS_DIR}" 2>/dev/null | wc -l) task log files"
