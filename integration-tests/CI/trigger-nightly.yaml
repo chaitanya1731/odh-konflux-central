@@ -41,6 +41,8 @@ spec:
             description: "the operator image reference (with SHA) to use for nightly"
           - name: latest-catalog-ci-build-url
             description: "the build url for the latest catalog"
+          - name: previous-nightly-sha
+            description: "the previous nightly"
           steps:
           - image: quay.io/rhoai/rhoai-task-toolset:odh-nightly-runner
             name: get-latest-catalog-ci-build-sha
@@ -56,6 +58,16 @@ spec:
               echo "$skopeo_inspect" | jq -r '.Name + "@" + .Digest' | tr -d '\n' | tee "$(results.latest-catalog-ci-image.path)"; echo
               echo "$skopeo_inspect" | jq -r '.Labels."build-metadata-url"'  | tr -d '\n' | tee "$(results.latest-build-metadata-url.path)"; echo
               echo "$skopeo_inspect" | jq -r '.Labels."build-url"'  | tr -d '\n' | tee "$(results.latest-catalog-ci-build-url.path)"; echo
+
+              NIGHTLY_IMAGE="${CATALOG_IMAGE%:*}:odh-stable-nightly"
+              PREVIOUS_SHA=$(skopeo inspect --raw "docker://$NIGHTLY_IMAGE" 2>/dev/null | sha256sum | awk '{print "sha256:" $1}' || true)
+              if [ -n "$PREVIOUS_SHA" ]; then
+                printf '%s' "$PREVIOUS_SHA" > "$(results.previous-nightly-sha.path)"
+                echo "Previous nightly SHA: $PREVIOUS_SHA"
+              else
+                echo "No previous nightly found"
+                printf '%s' "" > "$(results.previous-nightly-sha.path)"
+              fi
       - name: tag-nightly
         runAfter:
         - choose-ci-build
@@ -160,6 +172,7 @@ spec:
               echo "Operator: $OPERATOR_IMAGE"
       - name: slack-notification
         description: notify slack about new nightly and persist thread_ts for downstream
+        onError: continue
         when:
         - input: $(params.TRIGGER_SLACK)
           operator: in
@@ -192,6 +205,8 @@ spec:
               value: $(tasks.choose-ci-build.results.latest-build-metadata-url)
             - name: BUILD_URL
               value: $(tasks.choose-ci-build.results.latest-catalog-ci-build-url)
+            - name: PREVIOUS_NIGHTLY_SHA
+              value: $(tasks.choose-ci-build.results.previous-nightly-sha)
             - name: CHANNEL
               valueFrom:
                 configMapKeyRef:
@@ -205,22 +220,31 @@ spec:
             workingDir: /workspace
             script: |
               #!/bin/bash
-              set -e
+              set -eo pipefail
               mkdir slack && cd slack
               git init .
               git remote add origin git@github.com:red-hat-data-services/rhods-devops-infra.git
-              git fetch origin main
-              git show origin/main:tools/send-slack-message/send-slack-message.sh > ./send-slack-message.sh
-              git show origin/main:tools/tracer/tracer.sh > ./tracer.sh
+              BRANCH=main
+              git fetch origin $BRANCH
+              git show origin/${BRANCH}:tools/send-slack-message/send-slack-message.sh > ./send-slack-message.sh
+              git show origin/${BRANCH}:tools/send-slack-message/tracer-diff.sh > ./tracer-diff.sh
+              git show origin/${BRANCH}:tools/tracer/tracer.sh > ./tracer.sh
               chmod +x ./send-slack-message.sh
+              chmod +x ./tracer-diff.sh
               chmod +x ./tracer.sh
 
               ./tracer.sh --odh -i "$LATEST_CATALOG_CI_IMAGE" --show-commits | tee tracer-output.txt
 
+              TRACER=./tracer.sh ./tracer-diff.sh --mode 2 --only-changes \
+                --old-label "previous nightly catalog" --new-label "this catalog" \
+                "--odh --digest $PREVIOUS_NIGHTLY_SHA" "--odh -i $LATEST_CATALOG_CI_IMAGE" \
+                  | tee tracer-diff.txt
+
               SUBST_VARS='$LATEST_CATALOG_CI_IMAGE $LATEST_BUILD_METADATA_URL $BUILD_URL'
               slack_message=$(echo "$MESSAGE_TEMPLATE" | envsubst "$SUBST_VARS")
+
               SLACK_RC=0
-              OUTPUT=$(./send-slack-message.sh -c "$CHANNEL" -m "$slack_message" -f tracer-output.txt -v 2>&1) || SLACK_RC=$?
+              OUTPUT=$(./send-slack-message.sh -c "$CHANNEL" -m "$slack_message" -m "$(cat tracer-diff.txt)" -f tracer-output.txt -v 2>&1) || SLACK_RC=$?
 
               THREAD_TS=$(printf '%s\n' "$OUTPUT" | grep -oP 'Setting new thread id:\s*\K[0-9]+\.[0-9]+' | head -1 || true)
 
