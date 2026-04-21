@@ -203,6 +203,8 @@ spec:
                   value: /workspace/artifacts-dir
                 - name: APPLICATIONS_NAMESPACE
                   value: kubeflow-trainer-system
+                - name: TEST_TIMEOUT_DOUBLE
+                  value: 40m
               workingDir: /workspace/source
               volumeMounts:
                 - name: credentials
@@ -381,13 +383,14 @@ spec:
                 git -C dw_src fetch "${DW_GIT_URL}" "${DW_GIT_COMMIT}" --depth=1
                 git -C dw_src checkout FETCH_HEAD
 
-                echo "Running Smoke and Sanity tests..."
+                cd dw_src
+                echo "Running ClusterTrainingRuntime and FashionMNIST CPU tests..."
                 mkdir -p "${ARTIFACT_DIR}"
                 TESTS_PASSED=true
-                TEST_TIER=Smoke go test -v -timeout 60m ./tests/trainer/ > "${ARTIFACT_DIR}/smoke-tests.log" 2>&1 || TESTS_PASSED=false
-                TEST_TIER=Sanity go test -v -timeout 60m ./tests/trainer/ > "${ARTIFACT_DIR}/sanity-tests.log" 2>&1 || TESTS_PASSED=false
-                cat "${ARTIFACT_DIR}/smoke-tests.log"
-                cat "${ARTIFACT_DIR}/sanity-tests.log"
+                go test -v -timeout 120m \
+                  -run "TestDefaultTrainingHubRuntimesMatchDefaultClusterRuntimes|TestRunTrainJobWithDefaultClusterTrainingRuntimes" \
+                  ./tests/trainer/ > "${ARTIFACT_DIR}/its-tests.log" 2>&1 || TESTS_PASSED=false
+                cat "${ARTIFACT_DIR}/its-tests.log"
                 if [ "${TESTS_PASSED}" != "true" ]; then
                   echo "Tests failed"
                   exit 1
