@@ -264,7 +264,7 @@ spec:
                 echo "WARNING: Slack send failed (rc=$SLACK_RC); proceeding without thread reply"
               fi
       - name: trigger-nightly-tests
-        description: trigger nightly tests via conforma-reporter GitHub Action
+        description: trigger nightly tests via rhods-devops-infra smoke-trigger workflow
         when:
         - input: $(params.TRIGGER_NIGHTLY_TESTS)
           operator: in
@@ -304,7 +304,7 @@ spec:
               TARGET=odh-stable
 
               OWNER="red-hat-data-services"
-              REPO="conforma-reporter"
+              REPO="rhods-devops-infra"
               WORKFLOW_FILE="smoke-trigger.yaml"
 
               THREAD_ID=""
