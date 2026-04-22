@@ -10,7 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "push"
       && target_branch == "$$TARGET_BRANCH$$"
-      && ( "images/runtime/training/py312-cuda130-torch210*/**".pathChanged()
+      && ( "images/runtime/training/py312-cuda130-torch210-openmpi41/**".pathChanged()
             || ".tekton/odh-training-cuda130-torch210-py312-openmpi41-ci-on-push.yaml".pathChanged() )
   creationTimestamp: null
   labels:
