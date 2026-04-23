@@ -178,6 +178,24 @@ spec:
       name: component_odh-training-cuda124-torch25-py311-ci
     - description: execute the integration test when component odh-training-cuda121-torch24-py311-ci updates
       name: component_odh-training-cuda121-torch24-py311-ci
+    - description: execute the integration test when component odh-th06-cuda130-torch291-py312-ci updates
+      name: component_odh-th06-cuda130-torch291-py312-ci
+    - description: execute the integration test when component odh-th06-rocm64-torch291-py312-ci updates
+      name: component_odh-th06-rocm64-torch291-py312-ci
+    - description: execute the integration test when component odh-training-cuda128-torch29-py312-ci updates
+      name: component_odh-training-cuda128-torch29-py312-ci
+    - description: execute the integration test when component odh-training-rocm64-torch29-py312-ci updates
+      name: component_odh-training-rocm64-torch29-py312-ci
+    - description: execute the integration test when component training-cuda updates
+      name: component_training-cuda
+    - description: execute the integration test when component training-rocm updates
+      name: component_training-rocm
+    - description: execute the integration test when component py312-cuda128-torch290 updates
+      name: component_py312-cuda128-torch290
+    - description: execute the integration test when component py312-rocm64-torch290 updates
+      name: component_py312-rocm64-torch290
+    - description: execute the integration test when component odh-training-cuda130-torch210-py312-openmpi41-ci updates
+      name: component_odh-training-cuda130-torch210-py312-openmpi41-ci
   resolverRef:
     params:
       - name: url

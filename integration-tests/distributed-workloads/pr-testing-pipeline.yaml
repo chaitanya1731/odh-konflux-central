@@ -201,6 +201,8 @@ spec:
                   value: $(params.SNAPSHOT)
                 - name: ARTIFACT_DIR
                   value: /workspace/artifacts-dir
+                - name: TEST_OUTPUT_DIR
+                  value: /workspace/artifacts-dir
                 - name: APPLICATIONS_NAMESPACE
                   value: kubeflow-trainer-system
                 - name: TEST_TIMEOUT_DOUBLE
