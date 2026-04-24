@@ -1494,6 +1494,26 @@ metadata:
     build.appstudio.openshift.io/pipeline: '{"name":"docker-build-multi-platform-oci-ta","bundle":"latest"}'
     build.appstudio.openshift.io/request: configure-pac-no-mr
     mintmaker.appstudio.redhat.com/disabled: "true"
+  name: odh-training-cuda130-torch210-py312-openmpi41-ci
+  namespace: open-data-hub-tenant
+spec:
+  application: opendatahub-builds
+  componentName: odh-training-cuda130-torch210-py312-openmpi41-ci
+  containerImage: quay.io/opendatahub/odh-training-cuda130-torch210-py312-openmpi41
+  source:
+    git:
+      context: images/runtime/training/py312-cuda130-torch210-openmpi41
+      dockerfileUrl: Dockerfile
+      revision: stable
+      url: https://github.com/opendatahub-io/distributed-workloads.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build-multi-platform-oci-ta","bundle":"latest"}'
+    build.appstudio.openshift.io/request: configure-pac-no-mr
+    mintmaker.appstudio.redhat.com/disabled: "true"
   name: odh-pipeline-runtime-pytorch-llmcompressor-cuda-py312-ci
   namespace: open-data-hub-tenant
 spec:
