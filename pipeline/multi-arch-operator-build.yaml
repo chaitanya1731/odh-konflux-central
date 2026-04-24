@@ -736,9 +736,6 @@ spec:
             git push
 
     when:
-    - input: "$(tasks.build-image-index.status)"
-      operator: in
-      values: ["Succeeded"]
     - input: "$(params.build-type)"
       operator: notin
       values: ["Release"]
