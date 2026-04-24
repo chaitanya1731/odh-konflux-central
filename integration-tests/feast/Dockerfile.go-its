@@ -6,6 +6,8 @@ RUN ln -sf /usr/bin/python3.12 /usr/bin/python3 && \
     ln -sf /usr/bin/python3.12 /usr/bin/python
 RUN python3 -m pip install --break-system-packages --no-cache-dir uv
 ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
+# Feast operator Makefile + go.mod use Go 1.24+; allow fetching matching toolchain when base image is older
+ENV GOTOOLCHAIN=auto
 RUN wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/openshift-client-linux.tar.gz && \
     tar xvf openshift-client-linux.tar.gz && chmod +x oc && mv oc /usr/local/bin/
 RUN ln -s /usr/local/bin/oc /usr/bin/kubectl
