@@ -2,7 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "baseBranches": ["main"],
   "dependencyDashboard": true,
-  "enabledManagers": ["tekton"],
+  "enabledManagers": ["tekton", "dockerfile"],
   "tekton": {
     "schedule": ["at any time"],
     "fileMatch": ["\\.yaml$", "\\.yml$"],
@@ -14,5 +14,9 @@
         "enabled": false
       }
     ]
+  },
+  "dockerfile": {
+    "fileMatch": ["integration-tests/kubeflow/Dockerfile\\.kubeflow"],
+    "schedule": ["at any time"]
   }
 }
