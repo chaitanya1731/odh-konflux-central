@@ -1,11 +1,9 @@
----
 # Nightly integration test pipeline for Feast.
 #
-# Builds feast-operator and feature-server images from the configured Git branch,
-# pushes them to quay.io/opendatahub as :odh-master, then provisions an ephemeral
-# HyperShift cluster, deploys those images, and runs the full e2e + REST API +
-# upgrade test suite.
-#
+# Resolves the latest Konflux-built odh-master images (pushed on every merge
+# to master by the odh-feast-operator-push and odh-feature-server-push
+# pipelines), provisions an ephemeral HyperShift cluster, deploys those
+# images, and runs the full e2e + REST API + upgrade test suite.
 #
 apiVersion: tekton.dev/v1
 kind: Pipeline
@@ -13,20 +11,16 @@ metadata:
   name: odh-nightly-test-feast
 spec:
   description: |
-    Nightly integration test for Feast. Builds feast-operator and feature-server
-    images from the configured Git branch, pushes them to quay.io/opendatahub as
-    :odh-master, then provisions an ephemeral HyperShift cluster, deploys those
-    images, and runs the full e2e + REST API + upgrade test suite.
+    Nightly integration test for Feast. Resolves the latest Konflux-built
+    odh-master images, provisions an ephemeral HyperShift cluster, deploys
+    those images, and runs the full e2e + REST API + upgrade test suite.
   params:
-    - description: List of components in the group
-      name: group-components
-      type: string
     - name: oci-artifacts-repo
       default: 'quay.io/opendatahub/odh-ci-artifacts'
       description: The OCI container used to store all test artifacts.
     - name: artifact-browser-url
       default: 'https://app-artifact-browser.apps.rosa.konflux-qe.zmr9.p3.openshiftapps.com'
-      description: The OCI container used to store all test artifacts.
+      description: The OCI artifact browser URL.
     - name: git-repo
       default: 'opendatahub-io/feast'
       description: GitHub repo (owner/name) for commit status reporting.
@@ -34,199 +28,97 @@ spec:
       default: 'master'
       description: Branch to report status against.
   tasks:
-    - name: build-and-push-images
+    - name: resolve-images
       description: |
-        Clone opendatahub-io/feast, build feast-operator and feature-server for Linux/amd64,
-        push quay.io/opendatahub/feast-operator:odh-master and feature-server:odh-master, emit SNAPSHOT digests.
+        Resolve the current digest of the Konflux-built odh-master images
+        (quay.io/opendatahub/feast-operator:odh-master and feature-server:odh-master)
+        and emit a SNAPSHOT. No build step required — images are already built
+        and pushed by the push pipelines on every merge to master.
       params:
-        - name: COMPONENTS
-          value: $(params.group-components)
         - name: git-repo
           value: $(params.git-repo)
         - name: git-branch
           value: $(params.git-branch)
       taskSpec:
         params:
-          - name: COMPONENTS
-            description: List of components in the group
           - name: git-repo
             description: GitHub repo as owner/name (e.g. opendatahub-io/feast)
           - name: git-branch
-            description: Branch to build from
+            description: Branch to resolve the HEAD commit from
         results:
           - name: SNAPSHOT
-            description: JSON snapshot of component images (by digest after push)
+            description: JSON snapshot of component images (digest-pinned)
           - name: git-revision
-            description: Git revision built from the source
-        volumes:
-          - name: odh-registry-push
-            secret:
-              secretName: odh-registry-secret
-              items:
-                - key: .dockerconfigjson
-                  path: config.json
-          - name: varlibcontainers
-            emptyDir: {}
+            description: Git commit embedded in the operator image labels
         steps:
-          - name: clone-build-push
-            image: quay.io/konflux-ci/buildah-task:latest@sha256:4c470b5a153c4acd14bf4f8731b5e36c61d7faafe09c2bf376bb81ce84aa5709
-            securityContext:
-              capabilities:
-                add:
-                  - SETFCAP
-            computeResources:
-              requests:
-                memory: "4Gi"
-                cpu: "2"
-              limits:
-                memory: "8Gi"
-                cpu: "4"
+          - name: resolve
+            image: quay.io/konflux-ci/konflux-test:stable
             env:
-              - name: COMPONENTS
-                value: $(params.COMPONENTS)
               - name: GIT_REPO
                 value: $(params.git-repo)
               - name: GIT_BRANCH
                 value: $(params.git-branch)
-              - name: REGISTRY_PREFIX
-                value: quay.io/opendatahub
-              - name: IMAGE_TAG
-                value: odh-master
-              - name: BUILDAH_FORMAT
-                value: docker
-              - name: STORAGE_DRIVER
-                value: vfs
-            volumeMounts:
-              - name: odh-registry-push
-                mountPath: /registry-auth
-                readOnly: true
-              - name: varlibcontainers
-                mountPath: /var/lib/containers
             script: |
               #!/bin/bash
               set -euo pipefail
 
-              export REGISTRY_AUTH_FILE=/registry-auth/config.json
-
-              WORKDIR=/workspace/feast-build
-              mkdir -p "${WORKDIR}"
-              cd "${WORKDIR}"
-
-              FEAST_GIT_URL="https://github.com/${GIT_REPO}.git"
-              echo "Cloning ${FEAST_GIT_URL} branch ${GIT_BRANCH}"
-              git clone --depth 1 --branch "${GIT_BRANCH}" "${FEAST_GIT_URL}" src
-              cd src
-              GIT_SHA="$(git rev-parse HEAD)"
+              OPERATOR_REF="quay.io/opendatahub/feast-operator:odh-master"
+              SERVER_REF="quay.io/opendatahub/feature-server:odh-master"
               GIT_URL="https://github.com/${GIT_REPO}"
 
-              OPERATOR_REF="${REGISTRY_PREFIX}/feast-operator:${IMAGE_TAG}"
-              SERVER_REF="${REGISTRY_PREFIX}/feature-server:${IMAGE_TAG}"
+              echo "=== Resolving odh-master image digests ==="
+              OPERATOR_DIGEST=$(skopeo inspect --no-tags "docker://${OPERATOR_REF}" \
+                | jq -r '.Name + "@" + .Digest')
+              SERVER_DIGEST=$(skopeo inspect --no-tags "docker://${SERVER_REF}" \
+                | jq -r '.Name + "@" + .Digest')
 
-              # Patch requirements.txt to install Feast SDK from the cloned source
-              # instead of the released PyPI version, so the nightly image contains
-              # the latest code from the branch (not just the last published release).
-              echo "=== Patching feature-server requirements.txt to use local source ==="
-              # Extract the pinned version before overwriting (used for setuptools_scm)
-              FS_DIR=sdk/python/feast/infra/feature_servers/multicloud
-              FEAST_VERSION=$(grep -oP 'feast\[minimal\]\s*==\s*\K[A-Za-z0-9.+!-]+' "${FS_DIR}/requirements.txt" | head -n1)
-              FEAST_VERSION="${FEAST_VERSION:-0.0.0.dev0}"
-              echo ".[minimal]" > "${FS_DIR}/requirements.txt"
-              cat "${FS_DIR}/requirements.txt"
+              echo "Operator: ${OPERATOR_DIGEST}"
+              echo "Server:   ${SERVER_DIGEST}"
 
-              # Add git to the image — needed when a FeatureStore CR uses
-              # feastProjectDir.git to clone a feature repo at init time.
-              # Skip if git is already installed (upstream may have added it).
-              cp "${FS_DIR}/Dockerfile" "${FS_DIR}/Dockerfile.orig"
-              if grep -q 'microdnf install.*git' "${FS_DIR}/Dockerfile"; then
-                echo "git already installed in Dockerfile, skipping patch"
-              elif grep -q 'microdnf install -y gcc' "${FS_DIR}/Dockerfile"; then
-                sed -i 's|microdnf install -y gcc|microdnf install -y git gcc|' "${FS_DIR}/Dockerfile"
-                echo "Patched Dockerfile to add git"
-              else
-                echo "ERROR: Cannot find microdnf install line to patch for git"; exit 1
+              # Get git commit from image labels set by the Konflux build pipeline
+              GIT_COMMIT=$(skopeo inspect "docker://${OPERATOR_REF}" | jq -r '
+                .Labels["io.openshift.build.commit.id"] //
+                .Labels["vcs-ref"] //
+                .Labels["org.opencontainers.image.revision"] //
+                ""')
+
+              # Fallback: resolve current HEAD of the branch from GitHub
+              if [ -z "${GIT_COMMIT}" ]; then
+                echo "No git commit found in image labels, resolving from GitHub"
+                GIT_COMMIT=$(git ls-remote "https://github.com/${GIT_REPO}.git" \
+                  "refs/heads/${GIT_BRANCH}" | awk '{print $1}')
               fi
 
-              # Patch the Dockerfile so the nightly build installs from local source
-              # instead of PyPI. Changes needed:
-              #   1. Rewrite existing COPY paths for the wider build context (repo root)
-              #   2. Add COPY instructions for pyproject.toml and sdk/python source
-              #   3. Set WORKDIR so .[minimal] resolves to the feast project root
-              #   4. Set SETUPTOOLS_SCM_PRETEND_VERSION so setuptools_scm doesn't
-              #      need .git to determine the package version
-              echo "Using FEAST_VERSION=${FEAST_VERSION} for setuptools_scm"
-              grep -q 'COPY prebuild-power-base.sh' "${FS_DIR}/Dockerfile" \
-                || { echo "ERROR: COPY prebuild-power-base.sh not found in Dockerfile"; exit 1; }
-              grep -q 'COPY requirements.txt' "${FS_DIR}/Dockerfile" \
-                || { echo "ERROR: COPY requirements.txt not found in Dockerfile"; exit 1; }
-              sed -i \
-                -e "s|COPY prebuild-power-base.sh|COPY ${FS_DIR}/prebuild-power-base.sh|" \
-                -e "s|COPY requirements.txt|COPY ${FS_DIR}/requirements.txt|" \
-                "${FS_DIR}/Dockerfile"
-              # Insert source COPY + WORKDIR + setuptools_scm env after the
-              # requirements.txt COPY line so uv can resolve .[minimal]
-              grep -q 'COPY.*requirements.txt requirements.txt' "${FS_DIR}/Dockerfile" \
-                || { echo "ERROR: requirements.txt COPY anchor not found after rewrite"; exit 1; }
-              sed -i "/COPY.*requirements.txt requirements.txt/a COPY pyproject.toml README.md /opt/app-root/src/\nCOPY sdk/python /opt/app-root/src/sdk/python\nWORKDIR /opt/app-root/src\nENV SETUPTOOLS_SCM_PRETEND_VERSION=${FEAST_VERSION}" \
-                "${FS_DIR}/Dockerfile"
-              # When installing from source, the pre-built UI assets (build/projects-list.json)
-              # are not included. Replace the chmod with a version that creates the file first.
-              grep -q 'RUN chmod g+w' "${FS_DIR}/Dockerfile" \
-                || { echo "ERROR: 'RUN chmod g+w' not found in Dockerfile"; exit 1; }
-              python3 -c "import pathlib; p=pathlib.Path('${FS_DIR}/Dockerfile'); t=p.read_text(); p.write_text(t.replace('RUN chmod g+w', 'RUN FEAST_UI_DIR=\$(python -c \"import feast.ui as ui; print(ui.__path__[0])\") && mkdir -p \"\${FEAST_UI_DIR}/build\" && echo \"[]\" > \"\${FEAST_UI_DIR}/build/projects-list.json\" && chmod g+w'))"
-              echo "=== Patched Dockerfile ==="
-              cat -n "${FS_DIR}/Dockerfile"
+              if [ -z "${GIT_COMMIT}" ]; then
+                echo "ERROR: failed to resolve git commit from image labels or GitHub (image=${OPERATOR_REF} repo=${GIT_REPO} branch=${GIT_BRANCH})" >&2
+                exit 1
+              fi
 
-              echo "=== Build feature-server → ${SERVER_REF} ==="
-              buildah build --isolation chroot \
-                --platform linux/amd64 \
-                -f sdk/python/feast/infra/feature_servers/multicloud/Dockerfile \
-                -t "${SERVER_REF}" \
-                .
+              echo "Commit:   ${GIT_COMMIT}"
 
-              echo "=== Build feast-operator → ${OPERATOR_REF} ==="
-              buildah build --isolation chroot \
-                --platform linux/amd64 \
-                -f infra/feast-operator/Dockerfile \
-                -t "${OPERATOR_REF}" \
-                infra/feast-operator
+              # Warn if the image appears stale (older than 48h)
+              CREATED=$(skopeo inspect "docker://${OPERATOR_REF}" | jq -r '.Created')
+              IMAGE_AGE_HOURS=$(( ($(date +%s) - $(date -d "${CREATED}" +%s)) / 3600 ))
+              echo "Image age: ${IMAGE_AGE_HOURS}h (created: ${CREATED})"
+              if [ "${IMAGE_AGE_HOURS}" -gt 48 ]; then
+                echo "WARNING: odh-master image is ${IMAGE_AGE_HOURS}h old — the push pipeline may not have run recently"
+              fi
 
-              echo "=== Push images ==="
-              buildah push "${SERVER_REF}" "docker://${SERVER_REF}"
-              buildah push "${OPERATOR_REF}" "docker://${OPERATOR_REF}"
-
-              echo "=== Resolve digests ==="
-              OPERATOR_DIGEST="$(skopeo inspect --no-tags "docker://${OPERATOR_REF}" | jq -r '.Name + "@" + .Digest')"
-              SERVER_DIGEST="$(skopeo inspect --no-tags "docker://${SERVER_REF}" | jq -r '.Name + "@" + .Digest')"
-
-              echo "Built and pushed:"
-              echo "  Operator: ${OPERATOR_DIGEST}"
-              echo "  Server:   ${SERVER_DIGEST}"
-              echo "  Commit:   ${GIT_SHA}"
-
-              SNAPSHOT="$(jq -n \
-                --arg op_img "${OPERATOR_DIGEST}" \
-                --arg sv_img "${SERVER_DIGEST}" \
-                --arg commit "${GIT_SHA}" \
+              jq -n \
+                --arg op  "${OPERATOR_DIGEST}" \
+                --arg sv  "${SERVER_DIGEST}" \
+                --arg sha "${GIT_COMMIT}" \
                 --arg url "${GIT_URL}" \
                 '{
-                  "odh-feast-operator-ci": {
-                    "image": $op_img,
-                    "git.commit": $commit,
-                    "git.url": $url
-                  },
-                  "odh-feature-server-ci": {
-                    "image": $sv_img,
-                    "git.commit": $commit,
-                    "git.url": $url
-                  }
-                }')"
+                  "odh-feast-operator-ci":  {"image": $op, "git.commit": $sha, "git.url": $url},
+                  "odh-feature-server-ci":  {"image": $sv, "git.commit": $sha, "git.url": $url}
+                }' | tee "$(results.SNAPSHOT.path)"
 
-              echo "${SNAPSHOT}" | tee "$(results.SNAPSHOT.path)"
-              echo -n "${GIT_SHA}" > "$(results.git-revision.path)"
+              echo -n "${GIT_COMMIT}" > "$(results.git-revision.path)"
 
     - name: provision-eaas-space
       runAfter:
-        - build-and-push-images
+        - resolve-images
       taskRef:
         resolver: git
         params:
@@ -341,7 +233,9 @@ spec:
               - name: KUBECONFIG
                 value: "/credentials/$(steps.get-kubeconfig.results.kubeconfig)"
               - name: SNAPSHOT
-                value: $(tasks.build-and-push-images.results.SNAPSHOT)
+                value: $(tasks.resolve-images.results.SNAPSHOT)
+              - name: GOTOOLCHAIN
+                value: auto
             workingDir: /workspace/source
             volumeMounts:
               - name: credentials
@@ -352,7 +246,6 @@ spec:
               STATUS_FILE="/test-status/deploy-and-e2e-status"
               echo "failed" > "$STATUS_FILE"
 
-              # Configure KUBECONFIG
               export KUBECONFIG
               echo "KUBECONFIG=${KUBECONFIG}"
               export HOME="${HOME:-/tmp}"
@@ -429,11 +322,9 @@ spec:
               - name: credentials
                 mountPath: /credentials
             script: |
-              # feast-must-gather
               mkdir -p "${ARTIFACT_DIR}/gather-feast"
               oc adm must-gather --image=quay.io/modh/must-gather:rhoai-2.24 --dest-dir "${ARTIFACT_DIR}/gather-feast" -- "export COMPONENT=feastoperator; /usr/bin/gather"
 
-              # openshift-must-gather
               mkdir -p "${ARTIFACT_DIR}/gather-openshift"
               oc adm must-gather --dest-dir "${ARTIFACT_DIR}/gather-openshift"
 
@@ -484,7 +375,7 @@ spec:
         - name: git-branch
           value: $(params.git-branch)
         - name: git-revision
-          value: $(tasks.build-and-push-images.results.git-revision)
+          value: $(tasks.resolve-images.results.git-revision)
         - name: oci-artifacts-repo
           value: $(params.oci-artifacts-repo)
         - name: artifact-browser-url
@@ -594,7 +485,6 @@ spec:
               ARTIFACTS_URL="${ARTIFACT_BROWSER_URL}/?oci=${OCI_REPO}:${PIPELINERUN_NAME}"
               echo "Artifacts: ${ARTIFACTS_URL}"
 
-              # Set commit status on the repo if credentials are available
               if [ -f "/workspace/basic-auth/.git-credentials" ]; then
                 GITHUB_TOKEN=$(cat /workspace/basic-auth/.git-credentials | grep github.com | sed 's|.*://||;s|@.*||;s|.*:||')
                 if [ -n "${GITHUB_TOKEN}" ] && [ -n "${GIT_REVISION}" ] && [ "${GIT_REVISION}" != "master" ]; then
