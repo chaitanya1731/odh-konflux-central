@@ -60,7 +60,7 @@ spec:
   source:
     git:
       dockerfileUrl: Dockerfiles/Dockerfile
-      revision: "stable"
+      revision: "main"
       url: https://github.com/opendatahub-io/opendatahub-operator
 ---
 apiVersion: appstudio.redhat.com/v1alpha1
