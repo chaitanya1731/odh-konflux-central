@@ -159,6 +159,29 @@ kind: IntegrationTestScenario
 metadata:
   labels:
     test.appstudio.openshift.io/optional: "false"
+  name: kuberay-ci-its-manual
+  namespace: open-data-hub-tenant
+spec:
+  application: opendatahub-builds
+  contexts:
+    - description: execute the integration test when component odh-kuberay-operator-controller-ci updates
+      name: component_odh-kuberay-operator-controller-ci
+  resolverRef:
+    params:
+      - name: url
+        value: https://github.com/opendatahub-io/odh-konflux-central.git
+      - name: revision
+        value: main
+      - name: pathInRepo
+        value: integration-tests/kuberay/pr-testing-pipeline.yaml
+    resolver: git
+    resourceKind: pipelinerun
+---
+apiVersion: appstudio.redhat.com/v1beta2
+kind: IntegrationTestScenario
+metadata:
+  labels:
+    test.appstudio.openshift.io/optional: "false"
   name: distributed-workloads-its-manual
   namespace: open-data-hub-tenant
 spec:
