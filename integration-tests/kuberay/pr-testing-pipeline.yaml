@@ -230,7 +230,7 @@ spec:
                   GIT_COMMIT=$(echo "$row" | base64 -d | jq -r '.source.git.revision')
                   GIT_URL=$(echo "$row" | base64 -d | jq -r '.source.git.url')
 
-                  if echo "${GIT_URL}" | grep -qE '/kuberay(\.git)?$'; then
+                  if echo "${GIT_URL}" | grep -q "kuberay"; then
                     KUBERAY_IMAGE="${IMAGE}"
                     KUBERAY_GIT_COMMIT="${GIT_COMMIT}"
                     KUBERAY_GIT_URL="${GIT_URL}"
@@ -268,6 +268,10 @@ spec:
                 # Run e2e tests directly from the cloned source
                 echo "Running kuberay e2e tests..."
                 cd kuberay_src/ray-operator
+                # Bump Ray cluster resources to build-image scenario (head: 6G req / 10G limit)
+                go run ../scripts/update-resources.go -scenario build-image test/e2e/support.go
+                # Extend gotestsum timeout to 60m to account for large image pulls on fresh cluster
+                sed -i 's/-timeout 30m/-timeout 60m/' images/tests/run-tests.sh
                 cp images/tests/.env-odh .
                 bash images/tests/run-tests.sh -testTier=Tier1 \
                   2>&1 | tee "${ARTIFACT_DIR}/its-tests.log"
