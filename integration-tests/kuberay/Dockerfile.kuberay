@@ -17,5 +17,3 @@ RUN wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable
 
 RUN go install gotest.tools/gotestsum@v1.13.0 && \
     mv /opt/app-root/src/go/bin/gotestsum /usr/local/bin/gotestsum
-
-USER 1001
