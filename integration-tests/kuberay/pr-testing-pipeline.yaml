@@ -315,6 +315,15 @@ spec:
                   --server-side --force-conflicts
                 oc rollout status deployment/kuberay-operator -n ${NAMESPACE} --timeout=300s
 
+                echo "Waiting for webhook CA bundle to be injected by OpenShift..."
+                for i in $(seq 1 30); do
+                  CA=$(oc get mutatingwebhookconfiguration kuberay-mutating-webhook-configuration \
+                    -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null)
+                  [ -n "$CA" ] && echo "CA bundle injected" && break
+                  echo "  attempt $i/30, retrying in 10s..."
+                  sleep 10
+                done
+
                 # Grant anyuid SCC to all service accounts so Ray pods can start in test-ns-* namespaces
                 oc adm policy add-scc-to-group anyuid system:serviceaccounts
 
