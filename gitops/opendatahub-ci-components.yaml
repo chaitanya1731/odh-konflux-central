@@ -1641,3 +1641,43 @@ spec:
       dockerfileUrl: Dockerfile
       revision: main
       url: https://github.com/opendatahub-io/models-as-a-service.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build-multi-platform-oci-ta","bundle":"latest"}'
+    mintmaker.appstudio.redhat.com/disabled: "true"
+    build.appstudio.openshift.io/request: configure-pac-no-mr
+  name: odh-ai-gateway-payload-processing-ci
+  namespace: open-data-hub-tenant
+spec:
+  application: opendatahub-builds
+  componentName: odh-ai-gateway-payload-processing-ci
+  containerImage: quay.io/opendatahub/odh-ai-gateway-payload-processing
+  source:
+    git:
+      context: .
+      dockerfileUrl: Dockerfile
+      revision: main
+      url: https://github.com/opendatahub-io/ai-gateway-payload-processing.git
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build-multi-platform-oci-ta","bundle":"latest"}'
+    mintmaker.appstudio.redhat.com/disabled: "true"
+    build.appstudio.openshift.io/request: configure-pac-no-mr
+  name: ai-gateway-payload-processing-e2e-ci
+  namespace: open-data-hub-tenant
+spec:
+  application: opendatahub-builds
+  componentName: ai-gateway-payload-processing-e2e-ci
+  containerImage: quay.io/opendatahub/ai-gateway-payload-processing-e2e
+  source:
+    git:
+      context: .
+      dockerfileUrl: Dockerfile.e2e
+      revision: main
+      url: https://github.com/opendatahub-io/ai-gateway-payload-processing.git
