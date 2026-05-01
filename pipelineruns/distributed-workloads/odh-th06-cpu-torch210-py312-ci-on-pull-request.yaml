@@ -10,9 +10,9 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: |
-    event == "pull_request"
-    && target_branch == "$$TARGET_BRANCH$$"
-    && ( "images/universal/training/th06-cpu-torch210-py312/**".pathChanged() || ".tekton/odh-th06-cpu-torch210-py312-ci-pull-request.yaml".pathChanged() )
+      event == "pull_request"
+      && target_branch == "$$TARGET_BRANCH$$"
+      && ( "images/universal/training/th06-cpu-torch210-py312/**".pathChanged() || ".tekton/odh-th06-cpu-torch210-py312-ci-on-pull-request.yaml".pathChanged() )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: opendatahub-builds
@@ -31,7 +31,7 @@ spec:
   - name: dockerfile
     value: Dockerfile
   - name: path-context
-    value: images/universal/training/th06-cpu-torch210-py312/
+    value: images/universal/training/th06-cpu-torch210-py312
   - name: pipeline-type
     value: pull-request
   - name: additional-tags
@@ -50,7 +50,7 @@ spec:
     - name: pathInRepo
       value: pipeline/multi-arch-container-build.yaml
   taskRunTemplate:
-    serviceAccountName: build-pipeline-odh-th06-cpu-torch210-py312
+    serviceAccountName: build-pipeline-odh-th06-cpu-torch210-py312-ci
   workspaces:
   - name: git-auth
     secret:
