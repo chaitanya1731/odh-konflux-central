@@ -19,7 +19,7 @@ metadata:
 spec:
   params:
   - name: group-components
-    value: '{ "odh-ai-gateway-payload-processing-ci": "opendatahub/ai-gateway-payload-processing", "ai-gateway-payload-processing-e2e-ci": "opendatahub/ai-gateway-payload-processing" }'
+    value: '{ "odh-ai-gateway-payload-processing-ci": "opendatahub/odh-ai-gateway-payload-processing", "ai-gateway-payload-processing-e2e-ci": "opendatahub/ai-gateway-payload-processing-e2e" }'
   pipelineRef:
     resolver: git
     params:

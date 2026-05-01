@@ -269,7 +269,7 @@ spec:
               echo "PAYLOAD_PROCESSING_E2E_IMAGE=${PAYLOAD_PROCESSING_E2E_IMAGE}"
               echo "PAYLOAD_PROCESSING_E2E_IMAGE (tag): ${PAYLOAD_PROCESSING_E2E_IMAGE%%@*}:${PAYLOAD_PROCESSING_E2E_TAG}"
 
-              ./test/e2e/script/e2e-ci.sh
+              ./test/e2e/scripts/e2e-ci.sh
 
               echo "success" > "$STATUS_FILE"
           - name: must-gather
