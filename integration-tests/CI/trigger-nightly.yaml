@@ -30,6 +30,10 @@ spec:
         name: TRIGGER_NIGHTLY_TAG
         type: string
         default: "true"
+      - description: Override the Slack channel from the configmap
+        name: OVERRIDE_CHANNEL
+        type: string
+        default: ""
     tasks:
       - name: choose-ci-build
         description: selects the latest ci build to promote to nightly
@@ -44,7 +48,7 @@ spec:
           - name: previous-nightly-sha
             description: "the previous nightly"
           steps:
-          - image: quay.io/rhoai/rhoai-task-toolset:odh-nightly-runner
+          - image: quay.io/rhoai-devops/base-runner:latest
             name: get-latest-catalog-ci-build-sha
             env:
             - name: HOME
@@ -94,7 +98,7 @@ spec:
                 echo "Error: catalog not found"
                 exit 1
               fi
-          - image: quay.io/rhoai/rhoai-task-toolset:odh-nightly-runner
+          - image: quay.io/rhoai-devops/base-runner:latest
             name: tag-nightly-images
             workingDir: /workspace
             env:
@@ -188,7 +192,7 @@ spec:
           - name: data
             optional: false
           steps:
-          - image: quay.io/rhoai/rhoai-task-toolset:odh-nightly-runner
+          - image: quay.io/rhoai-devops/slack-notifier:latest
             env:
             - name: HOME
               value: /workspace
@@ -212,6 +216,8 @@ spec:
                 configMapKeyRef:
                   name: slack-config
                   key: odh-notification-channel
+            - name: OVERRIDE_CHANNEL
+              value: $(params.OVERRIDE_CHANNEL)
             - name: MESSAGE_TEMPLATE
               valueFrom:
                 configMapKeyRef:
@@ -221,21 +227,14 @@ spec:
             script: |
               #!/bin/bash
               set -eo pipefail
-              mkdir slack && cd slack
-              git init .
-              git remote add origin git@github.com:red-hat-data-services/rhods-devops-infra.git
-              BRANCH=main
-              git fetch origin $BRANCH
-              git show origin/${BRANCH}:tools/send-slack-message/send-slack-message.sh > ./send-slack-message.sh
-              git show origin/${BRANCH}:tools/send-slack-message/tracer-diff.sh > ./tracer-diff.sh
-              git show origin/${BRANCH}:tools/tracer/tracer.sh > ./tracer.sh
-              chmod +x ./send-slack-message.sh
-              chmod +x ./tracer-diff.sh
-              chmod +x ./tracer.sh
 
-              ./tracer.sh --odh -i "$LATEST_CATALOG_CI_IMAGE" --show-commits | tee tracer-output.txt
+              if [ -n "$OVERRIDE_CHANNEL" ]; then
+                CHANNEL="$OVERRIDE_CHANNEL"
+              fi
 
-              TRACER=./tracer.sh ./tracer-diff.sh --mode 2 --only-changes \
+              tracer.sh --odh -i "$LATEST_CATALOG_CI_IMAGE" --show-commits | tee tracer-output.txt
+
+              tracer-diff.sh --mode 2 --only-changes \
                 --old-label "previous nightly catalog" --new-label "this catalog" \
                 "--odh --digest $PREVIOUS_NIGHTLY_SHA" "--odh -i $LATEST_CATALOG_CI_IMAGE" \
                   | tee tracer-diff.txt
@@ -244,7 +243,7 @@ spec:
               slack_message=$(echo "$MESSAGE_TEMPLATE" | envsubst "$SUBST_VARS")
 
               SLACK_RC=0
-              OUTPUT=$(./send-slack-message.sh -c "$CHANNEL" -m "$slack_message" -m "$(cat tracer-diff.txt)" -f tracer-output.txt -v 2>&1) || SLACK_RC=$?
+              OUTPUT=$(send-slack-message.sh -c "$CHANNEL" -m "$slack_message" -m "$(cat tracer-diff.txt)" -f tracer-output.txt -v 2>&1) || SLACK_RC=$?
 
               THREAD_TS=$(printf '%s\n' "$OUTPUT" | grep -oP 'Setting new thread id:\s*\K[0-9]+\.[0-9]+' | head -1 || true)
 
@@ -281,7 +280,7 @@ spec:
           - name: data
             optional: false
           steps:
-          - image: quay.io/rhoai/rhoai-task-toolset:odh-nightly-runner
+          - image: quay.io/rhoai-devops/base-runner:latest
             env:
             - name: HOME
               value: /workspace
@@ -297,9 +296,15 @@ spec:
                 configMapKeyRef:
                   name: slack-config
                   key: odh-notification-channel
+            - name: OVERRIDE_CHANNEL
+              value: $(params.OVERRIDE_CHANNEL)
             script: |
               #!/bin/bash
               set -e
+
+              if [ -n "$OVERRIDE_CHANNEL" ]; then
+                CHANNEL="$OVERRIDE_CHANNEL"
+              fi
 
               TARGET=odh-stable
 
