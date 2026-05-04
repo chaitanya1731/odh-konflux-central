@@ -238,7 +238,7 @@ spec:
                       DW_GIT_COMMIT="${GIT_COMMIT}"
                       DW_GIT_URL="${GIT_URL}"
                     fi
-                    if [ "${COMPONENT_NAME}" = "odh-th06-cpu-torch291-py312-ci" ]; then
+                    if [ "${COMPONENT_NAME}" = "odh-th06-cpu-torch210-py312-ci" ]; then
                       DW_GIT_COMMIT="${GIT_COMMIT}"
                       DW_GIT_URL="${GIT_URL}"
                     fi
