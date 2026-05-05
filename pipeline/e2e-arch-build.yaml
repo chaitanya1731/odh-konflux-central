@@ -332,6 +332,13 @@ spec:
       operator: in
       values:
       - "true"
+  - name: pipeline-success-indicator
+    taskSpec:
+      steps:
+      - name: noop
+        image: quay.io/rhoai-konflux/alpine:latest
+        script: |
+          echo "Success"
   finally:
   - name: show-sbom
     params:
