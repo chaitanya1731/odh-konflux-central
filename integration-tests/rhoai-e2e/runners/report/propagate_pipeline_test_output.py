@@ -132,14 +132,19 @@ def main() -> int:
                 text = _pipeline_run_condition_fallback(pr, pr_name)
     smoke_path, bvt_path = _workspace_paths()
     test_gates = os.environ.get("TEST_GATES", "").strip()
-    text = publish_results_test_output_json_from_raw(
+    gate_preserving = text
+    publish_text = publish_results_test_output_json_from_raw(
         text,
         test_gates=test_gates,
         bvt_path=bvt_path,
         smoke_path=smoke_path,
     )
-    write_result(result_path, text)
-    print(f"Wrote pipeline TEST_OUTPUT ({len(text)} chars) to {result_path}")
+    write_result(result_path, gate_preserving)
+    print(f"Wrote gate-preserving PIPELINE_TEST_OUTPUT ({len(gate_preserving)} chars) to {result_path}")
+    test_output_path = os.environ.get("TEST_OUTPUT_RESULT_PATH", "").strip()
+    if test_output_path and "$(" not in test_output_path:
+        write_result(test_output_path, publish_text)
+        print(f"Wrote publish TEST_OUTPUT ({len(publish_text)} chars) to {test_output_path}")
     return 0
 
 

@@ -43,11 +43,33 @@ _JOBSET_OPERATOR_KIND = "jobsetoperator.operator.openshift.io"
 _LWS_OPERATOR_KIND = "leaderworkersetoperator.operator.openshift.io"
 
 
+def _rhcl_csv_for_maas_dependency_probe() -> str:
+    from install.rhcl_deps import (
+        _succeeded_rhcl_csv_name,
+        _subscription_current_csv,
+        rhcl_starting_csv,
+    )
+
+    return (
+        (_subscription_current_csv() or "").strip()
+        or (_succeeded_rhcl_csv_name() or "").strip()
+        or rhcl_starting_csv()
+    )
+
+
 def maas_dependency_operators_ready() -> bool:
+    from install.rhcl_deps import (
+        _rhcl_authorino_via_workload,
+        rhcl_operators_ready,
+        rhcl_stack_functional,
+        rhcl_starting_csv,
+    )
+
+    csv_name = _rhcl_csv_for_maas_dependency_probe()
+    if _rhcl_authorino_via_workload(csv_name):
+        return rhcl_stack_functional(csv_name=csv_name)
     if not _authorino_crd_available() or not _authorino_cr_exists():
         return False
-    from install.rhcl_deps import rhcl_operators_ready, rhcl_starting_csv
-
     return rhcl_operators_ready(rhcl_starting_csv())
 
 

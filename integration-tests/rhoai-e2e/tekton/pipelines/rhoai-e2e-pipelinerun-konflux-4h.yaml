@@ -1,10 +1,10 @@
 ---
-# IntegrationTestScenario wrapper for konflux-rhoai1 external cluster (S3 install-data; resourceKind: pipelinerun).
-# Legacy generateName prefix kept for KubeArchive filters; cluster label is konflux-rhoai1.
+# Integration Service wrapper for konflux-rhoai1 (4h pipeline timeout).
+# EPHC and other scenarios use rhoai-e2e-pipelinerun.yaml (9h0m0s).
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  generateName: e2e-its-konflux-rhoai1-smoke-
+  generateName: e2e-its-smoke-
   labels:
     pipelines.appstudio.openshift.io/type: test
     pac.test.appstudio.openshift.io/event-type: push

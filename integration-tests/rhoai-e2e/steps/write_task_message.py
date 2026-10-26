@@ -25,6 +25,7 @@ from _bootstrap import ensure_rhoai_e2e_path
 ensure_rhoai_e2e_path()
 
 from runners.report.junit_suite_report import (
+    GATE_NOT_RUN_SUMMARY,
     augment_publish_gate_note,
     build_publish_results_gate_summaries,
     build_tier1_gate_summary,
@@ -381,10 +382,18 @@ def _write_publish_gate_summaries(
     summaries: dict[str, str],
 ) -> None:
     gate_paths = {name: paths[name] for name in _PUBLISH_GATE_RESULT_NAMES if name in paths}
+    def _write_gate_summary(val: str) -> bool:
+        text = (val or "").strip()
+        if not text:
+            return False
+        if text == GATE_NOT_RUN_SUMMARY:
+            return True
+        return not is_gate_summary_placeholder(text)
+
     to_write = {
         name: summaries[name]
         for name in gate_paths
-        if summaries.get(name, "").strip() and not is_gate_summary_placeholder(summaries[name])
+        if _write_gate_summary(summaries.get(name, ""))
     }
     if to_write:
         write_tekton_results_at_paths(to_write, gate_paths)
@@ -732,7 +741,10 @@ def _finalize_publish_results() -> None:
     }
     if paths:
         write_tekton_results_at_paths(authoritative, paths)
-    _write_publish_gate_summaries(paths=paths, summaries=resolved_gates)
+    _write_publish_gate_summaries(
+        paths=paths,
+        summaries={**gate_summaries, **resolved_gates},
+    )
 
     size = tekton_results_termination_payload_size({**fitted_core, **authoritative})
     print(

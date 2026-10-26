@@ -432,6 +432,31 @@ class RhclDepsTest(unittest.TestCase):
             with patch("install.rhcl_deps._csv_phase", return_value="Succeeded"):
                 self.assertTrue(mod.rhcl_operators_ready(target))
 
+    @patch("components.maas_billing.auth.authorino_workload_deployed", return_value=True)
+    @patch("install.rhcl_deps.pick_succeeded_csv_version", return_value=None)
+    def test_rhcl_stack_functional_rhcl_15_uses_workload_not_authorino_csv(
+        self,
+        pick_authorino_csv,
+        workload_ready,
+    ) -> None:
+        csv_name = "rhcl-operator.v1.5.0"
+        with patch("install.rhcl_deps._csv_phase", return_value="Succeeded"):
+            self.assertTrue(mod.rhcl_stack_functional(csv_name=csv_name))
+        workload_ready.assert_called_once()
+        pick_authorino_csv.assert_not_called()
+
+    @patch("components.maas_billing.auth.authorino_workload_deployed", return_value=False)
+    def test_rhcl_stack_functional_rhcl_15_false_when_workload_not_ready(self, _workload) -> None:
+        with patch("install.rhcl_deps._csv_phase", return_value="Succeeded"):
+            self.assertFalse(mod.rhcl_stack_functional(csv_name="rhcl-operator.v1.5.0"))
+
+    @patch("components.maas_billing.auth.authorino_workload_deployed", return_value=False)
+    def test_rhcl_operators_ready_rhcl_15_without_authorino_workload(self, _workload) -> None:
+        target = "rhcl-operator.v1.5.0"
+        with patch("install.rhcl_deps._subscription_current_csv", return_value=target):
+            with patch("install.rhcl_deps._csv_phase", return_value="Succeeded"):
+                self.assertTrue(mod.rhcl_operators_ready(target))
+
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

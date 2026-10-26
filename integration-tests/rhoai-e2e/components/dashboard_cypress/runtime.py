@@ -1057,9 +1057,15 @@ def wait_for_gateway_auth_stack_ready(timeout_sec: int | None = None) -> bool:
             total = int(raw)
         except ValueError:
             total = 900
+    from components.maas_billing.auth import recover_authorino_tls_inline
+
     deadline = time.time() + max(30, total)
+    poll = 0
     while time.time() < deadline:
         reconcile_gateway_stack_incomplete_marker()
+        if poll == 0 or poll % 5 == 0:
+            recover_authorino_tls_inline()
+        poll += 1
         deps_ok = gateway_auth_stack_ready()
         deploy_ok = verify_gateway_stack_healthy()
         if deps_ok and deploy_ok and not gateway_stack_incomplete():

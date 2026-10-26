@@ -54,6 +54,7 @@ class GatewayAuthStackReadyTest(unittest.TestCase):
 
 
 class WaitForGatewayAuthStackReadyTest(unittest.TestCase):
+    @patch("components.maas_billing.auth.recover_authorino_tls_inline", return_value=True)
     @patch("components.dashboard_cypress.runtime.time.sleep")
     @patch("components.dashboard_cypress.runtime.time.time")
     @patch("helpers.gateway_stack_marker.gateway_stack_incomplete", return_value=False)
@@ -68,6 +69,7 @@ class WaitForGatewayAuthStackReadyTest(unittest.TestCase):
         _incomplete: object,
         time_mock: object,
         _sleep: object,
+        _recover: object,
     ) -> None:
         time_mock.side_effect = [0.0, 1.0]
         self.assertTrue(wait_for_gateway_auth_stack_ready(timeout_sec=60))

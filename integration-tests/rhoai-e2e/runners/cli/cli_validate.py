@@ -10,18 +10,18 @@ from pathlib import Path
 from .cli_parser import CliArgumentParser, _KA_HOST_FROM_ENV
 from suite.component_catalog import default_components_smoke_config_path, load_components_smoke_catalog
 from suite.component_plan import validate_and_normalize_components_csv
-from suite.constants import default_tests_config_path
-from suite.constants import is_test_only_product, product_installs_operator
+from suite.constants import (
+    default_tests_config_path,
+    is_test_only_product,
+    normalize_product,
+    product_installs_operator,
+)
 from suite.errors import AppError
 from suite.its_registry import (
     integration_test_scenario_application,
     integration_test_scenario_default_konflux_app,
-    looks_like_its_manifest_path,
-    materialize_upstream_main_its_manifest,
     resolve_integration_test_scenario_ref,
     resolve_integration_test_scenario_run_its_snapshot,
-    should_use_upstream_main_its_for_run_its,
-    upstream_main_its_manifest_available,
 )
 from suite.tests_config import load_tests_catalog
 from suite.tests_plan import (
@@ -82,6 +82,37 @@ def _apply_rhoai_version_product_default(
     args.product = "rhoai"
 
 
+def _apply_structural_product_default(
+    args: argparse.Namespace, *, product_explicit: bool
+) -> None:
+    """``--structural`` implies ``--product rhoai`` unless another product was set explicitly."""
+    if not getattr(args, "structural", False):
+        return
+    if args.product == "rhoai":
+        return
+    if product_explicit:
+        raise AppError(
+            "--structural is supported only with --product rhoai (or omit --product).",
+            2,
+        )
+    args.product = "rhoai"
+
+
+def _require_structural_rhoai_version(args: argparse.Namespace) -> None:
+    """CLI-direct snapshots often lack PAC catalog lines; nightly RELEASE_PATH needs a line."""
+    if getattr(args, "structural_tests", False):
+        return
+    if not getattr(args, "structural", False):
+        return
+    if re.match(r"^\d+\.\d+", (getattr(args, "version", "") or "").strip()):
+        return
+    raise AppError(
+        "--structural requires --rhoai-version (e.g. 3.6-ea.1) to map "
+        "releases/self-managed/nightly-<line> when Snapshot PAC metadata is absent.",
+        2,
+    )
+
+
 _ENABLE_ITS_ALLOWED_TRIGGER_FLAGS = frozenset({"--konflux-repo", "--konflux-branch"})
 
 
@@ -110,6 +141,8 @@ def _trigger_options_incompatible_with_query(
         (bool((args.tests_rhoai_version or "").strip()), "--tests-rhoai-version"),
         (bool(args.slack_channel_id), "--slack-channel-id"),
         (getattr(args, "product_explicit", False), "--product"),
+        (getattr(args, "structural", False), "--structural"),
+        (getattr(args, "structural_tests", False), "--structural-tests"),
     ]
     return [flag for active, flag in checks if active]
 
@@ -164,12 +197,29 @@ def parse_cli_args(parser: CliArgumentParser, argv: list[str]) -> argparse.Names
     args.secret_source = secret_source
 
     _apply_rhoai_version_product_default(args, product_explicit=product_explicit)
+    _apply_structural_product_default(args, product_explicit=product_explicit)
     if (args.version or "").strip() and not re.match(r"^\d+\.\d+", args.version.strip()):
         raise AppError(
             "--rhoai-version must start with MAJOR.MINOR (e.g. 3.5 or 3.5-ea.2), "
             f"not {args.version.strip()!r}.",
             2,
         )
+    if getattr(args, "structural_tests", False):
+        if not (getattr(args, "image", "") or "").strip():
+            raise AppError("--structural-tests requires --image <FBC catalog pullspec>", 2)
+        if tests_explicit or components_explicit or test_timeout_explicit:
+            raise AppError(
+                "--structural-tests cannot be combined with --tests, --components, or --test-timeout.",
+                2,
+            )
+        if product_explicit and normalize_product(args.product) != "rhoai":
+            raise AppError(
+                "--structural-tests requires PRODUCT=rhoai (omit --product or pass --product rhoai).",
+                2,
+            )
+        args.product = "rhoai"
+        args.structural = True
+    _require_structural_rhoai_version(args)
     if getattr(args, "install_dependencies", False) and product_installs_operator(args.product):
         raise AppError("--install-dependencies requires test-only mode (omit --product)", 2)
     if args.ocp_version:
@@ -201,61 +251,72 @@ def parse_cli_args(parser: CliArgumentParser, argv: list[str]) -> argparse.Names
     args.components_catalog = comp_catalog
     args.components_catalog_default_csv = comp_catalog.enabled_components_csv
 
-    if tests_explicit or (args.tests or "").strip():
-        phases_csv, test_tags, scoped_components, auto_scope_tags = (
-            validate_and_normalize_tests_csv_cli(
-                args.tests,
-                catalog,
-                components_catalog=comp_catalog,
-            )
-        )
-        args.tests = phases_csv
-        args.test_tags = test_tags
-        args.test_slice_scoped_components = scoped_components
-        args.test_tags_inferred = auto_scope_tags and bool(test_tags)
-    else:
-        args.tests = catalog.default_csv
+    if getattr(args, "structural_tests", False):
+        args.tests = ""
         args.test_tags = ""
         args.test_slice_scoped_components = ()
         args.test_tags_inferred = False
-    args.tests_explicit = tests_explicit
-
-    if args.test_tags_inferred and not components_explicit:
-        args.components = ",".join(args.test_slice_scoped_components)
-        args.components_inferred = True
-    else:
+        args.tests_explicit = True
+        args.components = ""
         args.components_inferred = False
+        args.components_explicit = False
+        selected_tests: set[str] = set()
+    else:
+        if tests_explicit or (args.tests or "").strip():
+            phases_csv, test_tags, scoped_components, auto_scope_tags = (
+                validate_and_normalize_tests_csv_cli(
+                    args.tests,
+                    catalog,
+                    components_catalog=comp_catalog,
+                )
+            )
+            args.tests = phases_csv
+            args.test_tags = test_tags
+            args.test_slice_scoped_components = scoped_components
+            args.test_tags_inferred = auto_scope_tags and bool(test_tags)
+        else:
+            args.tests = catalog.default_csv
+            args.test_tags = ""
+            args.test_slice_scoped_components = ()
+            args.test_tags_inferred = False
+        args.tests_explicit = tests_explicit
 
-    selected_tests = parse_tests_selection(args.tests, catalog)
-    args.components = validate_and_normalize_components_csv(
-        args.components,
-        tests_csv=args.tests,
-        components_catalog=comp_catalog,
-    )
-    args.components_explicit = components_explicit
-    if args.test_tags:
-        selected = {c.strip() for c in args.components.split(",") if c.strip()}
-        missing = set(args.test_slice_scoped_components) - selected
-        if missing:
-            need = ", ".join(sorted(missing))
-            raise AppError(
-                f"--tests test-slice tokens require component(s): {need} "
-                "(pass --components or rely on auto-scope).",
-                2,
-            )
-    if components_explicit and "smoke" not in selected_tests:
-        raise AppError("--components is only valid when --tests includes smoke.", 2)
-    if getattr(args, "install_dependencies", False) and not (selected_tests & {"smoke", "tier1"}):
-        raise AppError("--install-dependencies requires --tests smoke and/or tier1.", 2)
-    if getattr(args, "install_dependencies", False):
-        if not args.external_kubeconfig and not args.external_kubeconfig_secret and not (
-            getattr(args, "install_data_cluster", "") or ""
-        ).strip():
-            raise AppError(
-                "--install-dependencies requires --external-kubeconfig, "
-                "--external-kubeconfig-secret, or --install-data-cluster.",
-                2,
-            )
+        if args.test_tags_inferred and not components_explicit:
+            args.components = ",".join(args.test_slice_scoped_components)
+            args.components_inferred = True
+        else:
+            args.components_inferred = False
+
+        selected_tests = parse_tests_selection(args.tests, catalog)
+        args.components = validate_and_normalize_components_csv(
+            args.components,
+            tests_csv=args.tests,
+            components_catalog=comp_catalog,
+        )
+        args.components_explicit = components_explicit
+        if args.test_tags:
+            selected = {c.strip() for c in args.components.split(",") if c.strip()}
+            missing = set(args.test_slice_scoped_components) - selected
+            if missing:
+                need = ", ".join(sorted(missing))
+                raise AppError(
+                    f"--tests test-slice tokens require component(s): {need} "
+                    "(pass --components or rely on auto-scope).",
+                    2,
+                )
+        if components_explicit and "smoke" not in selected_tests:
+            raise AppError("--components is only valid when --tests includes smoke.", 2)
+        if getattr(args, "install_dependencies", False) and not (selected_tests & {"smoke", "tier1"}):
+            raise AppError("--install-dependencies requires --tests smoke and/or tier1.", 2)
+        if getattr(args, "install_dependencies", False):
+            if not args.external_kubeconfig and not args.external_kubeconfig_secret and not (
+                getattr(args, "install_data_cluster", "") or ""
+            ).strip():
+                raise AppError(
+                    "--install-dependencies requires --external-kubeconfig, "
+                    "--external-kubeconfig-secret, or --install-data-cluster.",
+                    2,
+                )
 
     if args.enable_its and (forbidden := _enable_its_forbidden_flags(args)):
         joined = ", ".join(forbidden)
@@ -346,17 +407,6 @@ def parse_cli_args(parser: CliArgumentParser, argv: list[str]) -> argparse.Names
         manifest_path, scenario_name = resolve_integration_test_scenario_ref(rhoai_e2e_root, its_ref)
         args.its_manifest_path = manifest_path
         args.its_scenario_name = scenario_name
-        if (
-            args.run_its
-            and not looks_like_its_manifest_path(args.run_its)
-            and should_use_upstream_main_its_for_run_its(
-                local_its=bool(getattr(args, "local_its", False)),
-                konflux_repo=(args.konflux_repo or "").strip(),
-                konflux_branch=(args.konflux_branch or "").strip(),
-            )
-            and upstream_main_its_manifest_available(scenario_name)
-        ):
-            args.its_manifest_path = materialize_upstream_main_its_manifest(scenario_name)
         if args.run_its:
             snap_path = resolve_integration_test_scenario_run_its_snapshot(
                 rhoai_e2e_root, scenario_name
@@ -376,6 +426,14 @@ def parse_cli_args(parser: CliArgumentParser, argv: list[str]) -> argparse.Names
     list_ocp_on = bool(args.list_supported_ocp)
     list_components_on = bool(getattr(args, "list_components", False))
     watch_on = args.watch is not None
+    structural_tests_on = bool(getattr(args, "structural_tests", False))
+    if structural_tests_on and (
+        args.enable_its or args.disable_its or args.run_its or watch_on or list_pipelines_on
+    ):
+        raise AppError(
+            "--structural-tests cannot be combined with --run-its, --enable-its, --disable-its, -w, or -l.",
+            2,
+        )
     delete_pipelines_on = bool(args.delete_pending_pipelines)
     cleanup_maintenance_on = bool(getattr(args, "cleanup_maintenance", False))
     query_modes = sum(

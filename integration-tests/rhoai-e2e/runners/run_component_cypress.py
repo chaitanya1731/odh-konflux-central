@@ -192,6 +192,10 @@ def main() -> int:
     tools_bin = str(tests_payload_tools_bin_dir(resolve_tests_payload_root(artifacts_dir.parent)))
     _apply_runner_exports(runner_env)
 
+    from components.maas_billing.auth import recover_authorino_tls_inline
+
+    recover_authorino_tls_inline()
+
     if not wait_for_gateway_auth_stack_ready():
         ec = _fail_or_warn_gateway(
             "gateway auth stack not ready after wait "

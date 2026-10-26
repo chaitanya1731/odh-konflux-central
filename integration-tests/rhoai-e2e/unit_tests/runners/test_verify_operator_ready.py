@@ -81,6 +81,27 @@ class VerifyOperatorReadyTest(unittest.TestCase):
             self.assertEqual(verify_operator_ready.main(), 0)
         publish_mock.assert_called_once()
 
+    @mock.patch("runners.verify_operator_ready.probe_installed_operator_version", return_value="")
+    def test_skips_dashboard_verify_when_install_dependencies_without_operator_csv(
+        self,
+        _probe: mock.MagicMock,
+    ) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "KUBECONFIG": "/tmp/kc",
+                "PRODUCT": "",
+                "COMPONENTS_CSV": "workbenches,dashboard_cypress,platform",
+                "INSTALL_DEPENDENCIES": "true",
+            },
+            clear=False,
+        ):
+            with mock.patch(
+                "runners.verify_operator_ready.verify_dashboard_route_for_prepare",
+            ) as verify_mock:
+                self.assertEqual(verify_operator_ready.main(), 0)
+                verify_mock.assert_not_called()
+
     def test_skips_dashboard_verify_for_install_dependencies_model_server(self) -> None:
         with mock.patch.dict(
             "os.environ",
