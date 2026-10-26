@@ -10,6 +10,7 @@ from install.dependency_operators import (  # noqa: E402
     _maas_deps_missing_message,
     custom_metrics_autoscaler_operator_ready,
     existing_smoke_without_install_dependencies,
+    maas_dependency_operators_ready,
     patch_odh_gitops_keda_pod_selector,
     require_maas_dependency_operators,
 )
@@ -62,6 +63,22 @@ class DependencyOperatorsExistingTest(unittest.TestCase):
                 "name=custom-metrics-autoscaler-operator",
                 script.read_text(encoding="utf-8"),
             )
+
+    def test_maas_deps_ready_rhcl_15_uses_stack_functional_not_authorino_cr(self) -> None:
+        with (
+            mock.patch(
+                "install.dependency_operators._rhcl_csv_for_maas_dependency_probe",
+                return_value="rhcl-operator.v1.5.0",
+            ),
+            mock.patch("install.rhcl_deps._rhcl_authorino_via_workload", return_value=True),
+            mock.patch("install.rhcl_deps.rhcl_stack_functional", return_value=True) as stack_fn,
+            mock.patch(
+                "install.dependency_operators._authorino_cr_exists",
+                return_value=False,
+            ),
+        ):
+            self.assertTrue(maas_dependency_operators_ready())
+        stack_fn.assert_called_once_with(csv_name="rhcl-operator.v1.5.0")
 
     def test_custom_metrics_autoscaler_ready_checks_csv_and_pod(self) -> None:
         with mock.patch("install.dependency_operators.oc_run") as oc_run:

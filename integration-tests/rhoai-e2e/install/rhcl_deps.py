@@ -27,6 +27,9 @@ _DEFAULT_TIMEOUT_SEC = 600
 _DEFAULT_RHCL_POST_INSTALL_RETRY_TIMEOUT_SEC = 900
 _RECOVERY_POST_INSTALL_TIMEOUT_CAP_SEC = 600
 _STARTING_CSV_RE = re.compile(r'^\s*startingCSV:\s*"?([^"\s]+)"?\s*$')
+_RHCL_CSV_VERSION_RE = re.compile(r"rhcl-operator\.v?(\d+(?:\.\d+)*)", re.IGNORECASE)
+# RHCL 1.5+ deploys Authorino via workload/CR, not an authorino-operator OLM CSV.
+_RHCL_WORKLOAD_AUTHORINO_MIN = (1, 5)
 _KUADRANT_STACK_CSV_PREFIXES = (
     "rhcl-operator",
     "authorino-operator",
@@ -459,26 +462,77 @@ def _succeeded_rhcl_csv_name() -> str | None:
     return name if _csv_phase(name) == "Succeeded" else None
 
 
-def rhcl_stack_functional(*, csv_name: str | None = None) -> bool:
-    """True when an RHCL CSV is Succeeded and authorino-operator is installed."""
-    name = (csv_name or _subscription_current_csv()).strip()
-    if not name:
+def _rhcl_csv_version_tuple(csv_name: str) -> tuple[int, ...]:
+    match = _RHCL_CSV_VERSION_RE.search((csv_name or "").strip())
+    if not match:
+        return (0,)
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def _rhcl_authorino_via_workload(csv_name: str) -> bool:
+    return _rhcl_csv_version_tuple(csv_name) >= _RHCL_WORKLOAD_AUTHORINO_MIN
+
+
+def _rhcl_csv_succeeded(csv_name: str) -> bool:
+    name = (csv_name or "").strip()
+    return bool(name) and _csv_phase(name) == "Succeeded"
+
+
+def _rhcl_pre_post_install_ready(csv_name: str) -> bool:
+    """RHCL CSV Succeeded; Authorino OLM CSV only before RHCL 1.5 (workload/TLS via post-install)."""
+    if not _rhcl_csv_succeeded(csv_name):
         return False
-    if _csv_phase(name) != "Succeeded":
-        return False
+    if _rhcl_authorino_via_workload(csv_name):
+        return True
     return pick_succeeded_csv_version(_RHCL_NS, "authorino-operator", timeout=30) is not None
+
+
+def _authorino_stack_ready_for_rhcl_csv(csv_name: str) -> bool:
+    if _rhcl_authorino_via_workload(csv_name):
+        from components.maas_billing.auth import authorino_workload_deployed
+
+        return authorino_workload_deployed()
+    return pick_succeeded_csv_version(_RHCL_NS, "authorino-operator", timeout=30) is not None
+
+
+def _reconcile_authorino_after_rhcl_workload(*, timeout_sec: int) -> None:
+    """RHCL 1.5+: wait for Authorino workload; best-effort TLS (install-dep gate is deployment)."""
+    if timeout_sec <= 0:
+        return
+    from components.maas_billing.auth import (
+        _wait_authorino_workload_ready,
+        authorino_workload_deployed,
+        authorino_workload_tls_ready,
+        recover_authorino_tls_inline,
+    )
+
+    if not authorino_workload_deployed():
+        try:
+            _wait_authorino_workload_ready(timeout_sec=timeout_sec)
+        except RuntimeError:
+            return
+    if authorino_workload_deployed() and not authorino_workload_tls_ready():
+        recover_authorino_tls_inline()
+
+
+def rhcl_stack_functional(*, csv_name: str | None = None) -> bool:
+    """True when RHCL CSV is Succeeded and Authorino is ready (CSV or workload per RHCL version)."""
+    name = (csv_name or _subscription_current_csv()).strip()
+    if not _rhcl_csv_succeeded(name):
+        return False
+    return _authorino_stack_ready_for_rhcl_csv(name)
 
 
 def rhcl_operators_ready(target_csv: str) -> bool:
     current = _subscription_current_csv()
-    if rhcl_stack_functional(csv_name=current):
+    if current and _rhcl_pre_post_install_ready(current):
         return True
     if not current or current == target_csv:
-        if rhcl_stack_functional(csv_name=target_csv):
+        if _rhcl_pre_post_install_ready(target_csv):
             return True
     if not current:
         installed = _succeeded_rhcl_csv_name()
-        if installed and rhcl_stack_functional(csv_name=installed):
+        if installed and _rhcl_pre_post_install_ready(installed):
             return True
     return False
 
@@ -606,28 +660,45 @@ def _wait_rhcl_operators_ready(target_csv: str, *, timeout_sec: int) -> None:
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         current = _subscription_current_csv()
-        if rhcl_stack_functional(csv_name=current):
-            label = current if current and current != target_csv else target_csv
-            print(f"✓ RHCL operator ready ({label} + authorino-operator)", flush=True)
+        if current and _rhcl_pre_post_install_ready(current):
+            label = current if current != target_csv else target_csv
+            authorino_note = (
+                "authorino via post-install"
+                if _rhcl_authorino_via_workload(label)
+                else "authorino-operator"
+            )
+            print(f"✓ RHCL operator ready ({label} + {authorino_note})", flush=True)
             return
 
         if not current:
             installed = _succeeded_rhcl_csv_name()
-            if installed and rhcl_stack_functional(csv_name=installed):
+            if installed and _rhcl_pre_post_install_ready(installed):
+                authorino_note = (
+                    "authorino via post-install"
+                    if _rhcl_authorino_via_workload(installed)
+                    else "authorino-operator"
+                )
                 print(
-                    f"✓ RHCL operator ready ({installed} + authorino-operator; "
+                    f"✓ RHCL operator ready ({installed} + {authorino_note}; "
                     f"subscription currentCSV unset)",
                     flush=True,
                 )
                 return
 
-        rhcl_phase = _csv_phase(current) if current else ""
-        authorino_ver = pick_succeeded_csv_version(_RHCL_NS, "authorino-operator", timeout=15)
+        effective_csv = current or _succeeded_rhcl_csv_name() or target_csv
+        rhcl_phase = _csv_phase(effective_csv) if effective_csv else ""
+        if effective_csv and _rhcl_authorino_via_workload(effective_csv):
+            from components.maas_billing.auth import authorino_workload_deployed
+
+            authorino_state = "ready" if authorino_workload_deployed() else "pending"
+        else:
+            authorino_ver = pick_succeeded_csv_version(_RHCL_NS, "authorino-operator", timeout=15)
+            authorino_state = authorino_ver or "pending"
         if int(time.time()) % 30 < 12:
             print(
                 f"Waiting for RHCL operators "
                 f"(currentCSV={current or '?'} phase={rhcl_phase or '?'} "
-                f"authorino={authorino_ver or 'pending'})...",
+                f"authorino={authorino_state})...",
                 flush=True,
             )
         approve_pending_installplans(_RHCL_NS)

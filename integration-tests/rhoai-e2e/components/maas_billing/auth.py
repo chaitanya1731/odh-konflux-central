@@ -180,16 +180,19 @@ def _authorino_tls_configured(namespace: str) -> bool:
     return bool((secret_r.stdout or "").strip())
 
 
-def authorino_workload_tls_ready() -> bool:
-    """True when Authorino CR, deployment, service, and listener TLS are ready."""
+def authorino_workload_deployed() -> bool:
+    """True when Authorino CR, deployment, and service exist (TLS may still be pending)."""
     if not _authorino_cr_exists():
         return False
     ns = _authorino_namespace()
-    return (
-        _authorino_deployment_ready(ns)
-        and _authorino_service_present(ns)
-        and _authorino_tls_configured(ns)
-    )
+    return _authorino_deployment_ready(ns) and _authorino_service_present(ns)
+
+
+def authorino_workload_tls_ready() -> bool:
+    """True when Authorino CR, deployment, service, and listener TLS are ready."""
+    if not authorino_workload_deployed():
+        return False
+    return _authorino_tls_configured(_authorino_namespace())
 
 
 def _wait_authorino_workload_ready(*, timeout_sec: int) -> str:

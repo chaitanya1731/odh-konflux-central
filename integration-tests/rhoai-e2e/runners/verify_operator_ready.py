@@ -14,7 +14,10 @@ ensure_rhoai_e2e_path()
 
 from components.dashboard_cypress.verify_route import verify_dashboard_route_for_prepare
 from components.dashboard_cypress.runtime import log_gateway_auth_stack_warnings
-from k8s.probe_operator_version import probe_installed_operator_version, publish_operator_version_results
+from k8s.probe_operator_version import (
+    probe_installed_operator_version,
+    publish_operator_version_results,
+)
 from suite.constants import is_test_only_product
 from steps.tests_payload import ensure_tests_payload_layout, resolve_tests_payload_root
 
@@ -46,14 +49,39 @@ def _dsc_crd_available() -> bool:
 
 def _skip_dashboard_verify_reason() -> str | None:
     """Skip Jenkins dashboard gate for deps-only test-only cluster smoke (e.g. model_server)."""
-    if not is_test_only_product(os.environ.get("PRODUCT", "")):
+    product = os.environ.get("PRODUCT", "")
+    if not is_test_only_product(product):
         return None
     component_ids = _selected_component_ids()
-    if "dashboard_cypress" in component_ids:
-        return None
     install_dependencies = _truthy_env("INSTALL_DEPENDENCIES") or _truthy_env(
         "RUN_COMPONENT_CLUSTER_PREP_IN_DEP_OPERATORS",
     )
+    if install_dependencies:
+        operator_ns = os.environ.get("OPERATOR_NAMESPACE", "redhat-ods-operator").strip()
+        operator_name = os.environ.get("OPERATOR_NAME", "rhods-operator").strip()
+        if "dashboard_cypress" in component_ids:
+            try:
+                from install.install_and_verify import pick_succeeded_csv_version
+
+                installed = (
+                    pick_succeeded_csv_version(
+                        operator_ns,
+                        operator_name,
+                        timeout=20,
+                    )
+                    or ""
+                ).strip()
+            except Exception:
+                return None
+        else:
+            installed = probe_installed_operator_version(operator_ns, operator_name)
+        if not installed:
+            return (
+                "test-only with install-dependencies and no rhods-operator CSV on cluster "
+                "(dashboard verify requires PRODUCT=rhoai install)"
+            )
+    if "dashboard_cypress" in component_ids:
+        return None
     if install_dependencies and component_ids:
         return (
             "test-only PRODUCT with install-dependencies and no dashboard_cypress "
